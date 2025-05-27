@@ -10,3 +10,9 @@ spacy
 matplotlib
 selenium
 pillow
+spacy>=3.4.0
+https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1.tar.gz
+fpdf2
+scikit-learn
+webdriver-manager
+numpy
