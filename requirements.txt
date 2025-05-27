@@ -1,0 +1,12 @@
+streamlit
+fpdf
+pandas
+requests
+beautifulsoup4
+telethon
+nest_asyncio
+scikit-learn
+spacy
+matplotlib
+selenium
+pillow
