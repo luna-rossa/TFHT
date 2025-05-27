@@ -20,17 +20,41 @@ import numpy as np
 from sklearn.pipeline import make_pipeline
 from sklearn.naive_bayes import MultinomialNB
 
-# Import spacy with error handling
+# Import spacy with proper cloud deployment handling
+USE_SPACY = True
 try:
     import spacy
 
-    nlp = spacy.load("en_core_web_sm")
-except OSError:
-    st.error("⚠️ spaCy English model not found. Please run: python -m spacy download en_core_web_sm")
-    st.stop()
-except ImportError:
-    st.error("⚠️ spaCy not installed. Please run: pip install spacy")
-    st.stop()
+    # Try to load the model, download if not available
+    try:
+        nlp = spacy.load("en_core_web_sm")
+    except OSError:
+        # Try to download and install the model
+        import subprocess
+        import sys
+
+        subprocess.run([sys.executable, "-m", "spacy", "download", "en_core_web_sm"], check=True)
+        nlp = spacy.load("en_core_web_sm")
+except (OSError, ImportError, subprocess.CalledProcessError) as e:
+    USE_SPACY = False
+    st.sidebar.warning("⚠️ spaCy not available - using basic text processing")
+
+
+    # Simple fallback for named entity recognition
+    def simple_entity_extraction(text):
+        import re
+        # Basic patterns for common entities
+        emails = re.findall(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', text)
+        phones = re.findall(r'\b\d{3}[-.]?\d{3}[-.]?\d{4}\b', text)
+        urls = re.findall(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', text)
+        entities = []
+        if emails:
+            entities.extend([f"{email} (EMAIL)" for email in emails])
+        if phones:
+            entities.extend([f"{phone} (PHONE)" for phone in phones])
+        if urls:
+            entities.extend([f"{url} (URL)" for url in urls])
+        return ", ".join(entities) if entities else "No entities found"
 
 from PIL import Image
 
@@ -146,8 +170,11 @@ if choice == "Forum Monitor":
                             st.markdown(f"🔗 [Link]({link})")
 
                             # Named entity recognition
-                            doc = nlp(text)
-                            ents = ", ".join([f"{ent.text} ({ent.label_})" for ent in doc.ents])
+                            if USE_SPACY:
+                                doc = nlp(text)
+                                ents = ", ".join([f"{ent.text} ({ent.label_})" for ent in doc.ents])
+                            else:
+                                ents = simple_entity_extraction(text)
 
                             # Risk assessment
                             risk = model.predict_proba([text])[0][1] if len(model.classes_) > 1 else 0.5
@@ -251,10 +278,18 @@ elif choice == "Evidence Capture":
                     chrome_options.add_argument("--no-sandbox")
                     chrome_options.add_argument("--disable-dev-shm-usage")
                     chrome_options.add_argument("--window-size=1920,1080")
+                    chrome_options.add_argument("--disable-gpu")
+                    chrome_options.add_argument("--remote-debugging-port=9222")
 
-                    # Use webdriver-manager to handle ChromeDriver automatically
-                    service = Service(ChromeDriverManager().install())
-                    driver = webdriver.Chrome(service=service, options=chrome_options)
+                    # For cloud deployment, try to use system chromium
+                    try:
+                        # Try system chromium first (for Streamlit Cloud)
+                        service = Service("/usr/bin/chromedriver")
+                        driver = webdriver.Chrome(service=service, options=chrome_options)
+                    except:
+                        # Fallback to webdriver-manager
+                        service = Service(ChromeDriverManager().install())
+                        driver = webdriver.Chrome(service=service, options=chrome_options)
 
                     driver.get(target_url)
                     time.sleep(3)  # Wait for page to load
